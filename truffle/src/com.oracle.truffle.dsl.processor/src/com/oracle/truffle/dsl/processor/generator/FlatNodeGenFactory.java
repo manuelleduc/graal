@@ -24,6 +24,46 @@
  */
 package com.oracle.truffle.dsl.processor.generator;
 
+import static com.oracle.truffle.dsl.processor.generator.GeneratorUtils.createTransferToInterpreterAndInvalidate;
+import static com.oracle.truffle.dsl.processor.java.ElementUtils.isObject;
+import static com.oracle.truffle.dsl.processor.java.ElementUtils.isSubtypeBoxed;
+import static com.oracle.truffle.dsl.processor.java.ElementUtils.isVoid;
+import static com.oracle.truffle.dsl.processor.java.ElementUtils.modifiers;
+import static com.oracle.truffle.dsl.processor.java.ElementUtils.needsCastTo;
+import static com.oracle.truffle.dsl.processor.java.ElementUtils.setVisibility;
+import static javax.lang.model.element.Modifier.ABSTRACT;
+import static javax.lang.model.element.Modifier.FINAL;
+import static javax.lang.model.element.Modifier.PRIVATE;
+import static javax.lang.model.element.Modifier.PUBLIC;
+import static javax.lang.model.element.Modifier.STATIC;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.ArrayType;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.ElementFilter;
+
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.dsl.Cached;
@@ -75,45 +115,6 @@ import com.oracle.truffle.dsl.processor.model.TemplateMethod;
 import com.oracle.truffle.dsl.processor.model.TypeSystemData;
 import com.oracle.truffle.dsl.processor.parser.SpecializationGroup;
 import com.oracle.truffle.dsl.processor.parser.SpecializationGroup.TypeGuard;
-
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.ArrayType;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.ElementFilter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
-
-import static com.oracle.truffle.dsl.processor.generator.GeneratorUtils.createTransferToInterpreterAndInvalidate;
-import static com.oracle.truffle.dsl.processor.java.ElementUtils.isObject;
-import static com.oracle.truffle.dsl.processor.java.ElementUtils.isSubtypeBoxed;
-import static com.oracle.truffle.dsl.processor.java.ElementUtils.isVoid;
-import static com.oracle.truffle.dsl.processor.java.ElementUtils.modifiers;
-import static com.oracle.truffle.dsl.processor.java.ElementUtils.needsCastTo;
-import static com.oracle.truffle.dsl.processor.java.ElementUtils.setVisibility;
-import static javax.lang.model.element.Modifier.ABSTRACT;
-import static javax.lang.model.element.Modifier.FINAL;
-import static javax.lang.model.element.Modifier.PRIVATE;
-import static javax.lang.model.element.Modifier.PUBLIC;
-import static javax.lang.model.element.Modifier.STATIC;
 
 class FlatNodeGenFactory {
 
@@ -329,6 +330,8 @@ class FlatNodeGenFactory {
             if (execution.getChild() != null && execution.getChild().needsGeneratedField()) {
                 clazz.add(createNodeField(PRIVATE, execution.getNodeType(), nodeFieldName(execution),
                                 Child.class));
+                clazz.add(createNodeGetMethod(PUBLIC, execution.getNodeType(), execution.getName()));
+                clazz.add(createNodeSetMethod(PUBLIC, execution.getNodeType(), execution.getName()));
             }
         }
 
@@ -1832,6 +1835,30 @@ class FlatNodeGenFactory {
         }
         setVisibility(childField.getModifiers(), visibility);
         return childField;
+    }
+
+    private Element createNodeGetMethod(Modifier public1, TypeMirror returnType, String name) {
+
+        CodeExecutableElement executable = new CodeExecutableElement(modifiers(PUBLIC), returnType, "get" + ElementUtils.firstLetterUpperCase(name));
+        CodeTreeBuilder builder = executable.createBuilder();
+        builder.startReturn();
+        builder.startStatement();
+        builder.string("this.");
+        builder.string(name + "_");
+        builder.end();
+        return executable;
+    }
+
+    private Element createNodeSetMethod(Modifier public1, TypeMirror returnType, String name) {
+
+        CodeExecutableElement executable = new CodeExecutableElement(modifiers(PUBLIC), context.getType(void.class), "set" + ElementUtils.firstLetterUpperCase(name));
+        executable.getParameters().add(new CodeVariableElement(ElementUtils.getType(context.getEnvironment(), returnType.getKind().getDeclaringClass().getSuperclass()), name));
+        CodeTreeBuilder builder = executable.createBuilder();
+        builder.startStatement();
+        builder.string("this.");
+        builder.string(name + "_ = (" + returnType.toString() + ")" + name);
+        builder.end();
+        return executable;
     }
 
     private static CodeTree callMethod(CodeTree receiver, ExecutableElement method, CodeTree... boundValues) {
