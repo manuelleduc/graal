@@ -288,7 +288,7 @@ In Proceedings of the 2014 International Conference on Principles and Practices 
 In Proceedings of the companion publication of the 13th international conference on Modularity (MODULARITY '14)
 
 - Lukas Stadler, Thomas Würthinger, Hanspeter Mössenböck  
-[**Partial Escape Analysis and Scalar Replacement for Java**](http://dx.doi.org/10.1145/2544137.2544157)  
+[**Partial Escape Analysis and Scalar Replacement for Java**](https://dl.acm.org/citation.cfm?doid=2544137.2544157)  
 In Proceedings of Annual IEEE/ACM International Symposium on Code Generation and Optimization (CGO '14)
 
 - Christian Häubl, Christian Wimmer, Hanspeter Mössenböck  
